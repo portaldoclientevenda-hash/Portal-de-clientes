@@ -1,0 +1,329 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Rede de segurança global: nega tudo por padrão
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // === Primitivas Globais ===
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isValidDateString(d) {
+      return d is string && d.size() == 10 && d.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$');
+    }
+
+    function isEmpresaOwner() {
+      return isSignedIn() && exists(/databases/$(database)/documents/empresas/$(request.auth.uid));
+    }
+
+    // === Blueprints de Validação ===
+    function isValidEmpresa(data) {
+      return data.keys().hasAll(['empresaId', 'nome', 'email', 'whatsapp', 'papel', 'pixChave', 'lgpdConsent', 'lgpdConsentAt', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['empresaId', 'nome', 'email', 'whatsapp', 'papel', 'pixChave', 'lgpdConsent', 'lgpdConsentAt', 'createdAt', 'updatedAt'])
+        && isValidId(data.empresaId)
+        && data.empresaId == request.auth.uid
+        && data.nome is string && data.nome.size() >= 2 && data.nome.size() <= 120
+        && data.email is string && data.email.size() >= 5 && data.email.size() <= 160
+        && data.whatsapp is string && data.whatsapp.size() >= 8 && data.whatsapp.size() <= 30
+        && data.papel == 'empresa'
+        && data.pixChave is string && data.pixChave.size() <= 160
+        && data.lgpdConsent == true
+        && data.lgpdConsentAt is timestamp
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidCliente(data) {
+      return data.keys().hasAll(['clienteId', 'empresaId', 'empresaNome', 'empresaEmail', 'nome', 'whatsapp', 'email', 'papel', 'lgpdConsent', 'lgpdConsentAt', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['clienteId', 'empresaId', 'empresaNome', 'empresaEmail', 'nome', 'whatsapp', 'email', 'papel', 'lgpdConsent', 'lgpdConsentAt', 'createdAt', 'updatedAt'])
+        && isValidId(data.clienteId)
+        && isValidId(data.empresaId)
+        && data.empresaNome is string && data.empresaNome.size() >= 2 && data.empresaNome.size() <= 120
+        && data.empresaEmail is string && data.empresaEmail.size() >= 5 && data.empresaEmail.size() <= 160
+        && data.nome is string && data.nome.size() >= 2 && data.nome.size() <= 120
+        && data.whatsapp is string && data.whatsapp.size() >= 8 && data.whatsapp.size() <= 30
+        && data.email is string && data.email.size() >= 5 && data.email.size() <= 160
+        && data.papel == 'cliente'
+        && data.lgpdConsent == true
+        && data.lgpdConsentAt is timestamp
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidBoleto(data) {
+      return data.keys().hasAll(['empresaId', 'clienteId', 'clienteNome', 'clienteWhatsapp', 'empresaNome', 'pixChave', 'codigoPix', 'descricao', 'valor', 'vencimento', 'status', 'pagoEm', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['empresaId', 'clienteId', 'clienteNome', 'clienteWhatsapp', 'empresaNome', 'pixChave', 'codigoPix', 'descricao', 'valor', 'vencimento', 'status', 'pagoEm', 'createdAt', 'updatedAt'])
+        && isValidId(data.empresaId)
+        && isValidId(data.clienteId)
+        && data.clienteNome is string && data.clienteNome.size() >= 2 && data.clienteNome.size() <= 120
+        && data.clienteWhatsapp is string && data.clienteWhatsapp.size() >= 8 && data.clienteWhatsapp.size() <= 30
+        && data.empresaNome is string && data.empresaNome.size() >= 2 && data.empresaNome.size() <= 120
+        && data.pixChave is string && data.pixChave.size() >= 3 && data.pixChave.size() <= 160
+        && data.codigoPix is string && data.codigoPix.size() >= 10 && data.codigoPix.size() <= 500
+        && data.descricao is string && data.descricao.size() >= 2 && data.descricao.size() <= 240
+        && (data.valor is int || data.valor is float) && data.valor > 0 && data.valor <= 10000000
+        && isValidDateString(data.vencimento)
+        && data.status in ['Pago', 'Pendente', 'Vencido']
+        && (data.status == 'Pago' ? data.pagoEm is timestamp : data.pagoEm == null)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidDocumento(data) {
+      return data.keys().hasAll(['empresaId', 'clienteId', 'clienteNome', 'titulo', 'descricao', 'fileName', 'fileSize', 'storageMode', 'chunkCount', 'storagePath', 'downloadUrl', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['empresaId', 'clienteId', 'clienteNome', 'titulo', 'descricao', 'fileName', 'fileSize', 'storageMode', 'chunkCount', 'storagePath', 'downloadUrl', 'createdAt', 'updatedAt'])
+        && isValidId(data.empresaId)
+        && isValidId(data.clienteId)
+        && data.clienteNome is string && data.clienteNome.size() >= 2 && data.clienteNome.size() <= 120
+        && data.titulo is string && data.titulo.size() >= 2 && data.titulo.size() <= 160
+        && data.descricao is string && data.descricao.size() <= 400
+        && data.fileName is string && data.fileName.size() >= 5 && data.fileName.size() <= 200
+        && (data.fileSize is int || data.fileSize is float) && data.fileSize > 0 && data.fileSize <= 5242880
+        && data.storageMode in ['firestore', 'storage']
+        && data.chunkCount is int && data.chunkCount >= 0 && data.chunkCount <= 30
+        && data.storagePath is string && data.storagePath.size() <= 400
+        && data.downloadUrl is string && data.downloadUrl.size() <= 1200
+        && (data.storageMode == 'firestore' ? data.chunkCount >= 1 : (data.storagePath.size() >= 10 && data.downloadUrl.size() >= 10))
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidDocumentoChunk(data) {
+      return data.keys().hasAll(['empresaId', 'clienteId', 'index', 'data', 'createdAt'])
+        && data.keys().hasOnly(['empresaId', 'clienteId', 'index', 'data', 'createdAt'])
+        && isValidId(data.empresaId)
+        && isValidId(data.clienteId)
+        && data.index is int && data.index >= 0 && data.index < 30
+        && data.data is string && data.data.size() >= 1 && data.data.size() <= 600000
+        && data.createdAt is timestamp;
+    }
+
+    function isValidChamado(data) {
+      return data.keys().hasAll(['empresaId', 'clienteId', 'clienteNome', 'titulo', 'mensagem', 'status', 'resposta', 'respondidoEm', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['empresaId', 'clienteId', 'clienteNome', 'titulo', 'mensagem', 'status', 'resposta', 'respondidoEm', 'createdAt', 'updatedAt'])
+        && isValidId(data.empresaId)
+        && isValidId(data.clienteId)
+        && data.clienteNome is string && data.clienteNome.size() >= 2 && data.clienteNome.size() <= 120
+        && data.titulo is string && data.titulo.size() >= 2 && data.titulo.size() <= 160
+        && data.mensagem is string && data.mensagem.size() >= 2 && data.mensagem.size() <= 1500
+        && data.status in ['Aberto', 'Em Andamento', 'Resolvido']
+        && data.resposta is string && data.resposta.size() <= 1500
+        && (data.respondidoEm == null || data.respondidoEm is timestamp)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidAtividade(data) {
+      return data.keys().hasAll(['empresaId', 'clienteId', 'actorUid', 'acao', 'detalhe', 'createdAt'])
+        && data.keys().hasOnly(['empresaId', 'clienteId', 'actorUid', 'acao', 'detalhe', 'createdAt'])
+        && isValidId(data.empresaId)
+        && data.clienteId is string && data.clienteId.size() <= 128
+        && isValidId(data.actorUid)
+        && data.actorUid == request.auth.uid
+        && data.acao is string && data.acao.size() >= 2 && data.acao.size() <= 120
+        && data.detalhe is string && data.detalhe.size() >= 2 && data.detalhe.size() <= 300
+        && data.createdAt is timestamp;
+    }
+
+    // === Regras por Coleção ===
+
+    match /empresas/{empresaId} {
+      allow get: if isSignedIn() && isValidId(empresaId) && request.auth.uid == empresaId;
+      allow list: if isSignedIn() && resource.data.empresaId == request.auth.uid;
+      allow create: if isSignedIn()
+        && isValidId(empresaId)
+        && request.auth.uid == empresaId
+        && isValidEmpresa(incoming())
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && incoming().lgpdConsentAt == request.time;
+      allow update: if isSignedIn()
+        && isValidId(empresaId)
+        && request.auth.uid == empresaId
+        && isValidEmpresa(incoming())
+        && incoming().empresaId == existing().empresaId
+        && incoming().papel == existing().papel
+        && incoming().lgpdConsent == existing().lgpdConsent
+        && incoming().lgpdConsentAt == existing().lgpdConsentAt
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly(['nome', 'whatsapp', 'pixChave', 'updatedAt']);
+      allow delete: if isSignedIn() && isValidId(empresaId) && request.auth.uid == empresaId;
+    }
+
+    match /clientes/{clienteId} {
+      allow get: if isSignedIn() && isValidId(clienteId)
+        && (existing().empresaId == request.auth.uid || clienteId == request.auth.uid);
+      allow list: if isSignedIn()
+        && (resource.data.empresaId == request.auth.uid || resource.data.clienteId == request.auth.uid);
+      allow create: if isSignedIn()
+        && isValidId(clienteId)
+        && isValidCliente(incoming())
+        && incoming().clienteId == clienteId
+        && incoming().empresaId == request.auth.uid
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && incoming().lgpdConsentAt == request.time
+        && isEmpresaOwner();
+      allow update: if isSignedIn()
+        && isValidId(clienteId)
+        && isValidCliente(incoming())
+        && incoming().clienteId == existing().clienteId
+        && incoming().empresaId == existing().empresaId
+        && incoming().papel == existing().papel
+        && incoming().lgpdConsent == existing().lgpdConsent
+        && incoming().lgpdConsentAt == existing().lgpdConsentAt
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          (existing().empresaId == request.auth.uid && incoming().diff(existing()).affectedKeys().hasOnly(['nome', 'whatsapp', 'email', 'empresaNome', 'empresaEmail', 'updatedAt'])) ||
+          (clienteId == request.auth.uid && incoming().diff(existing()).affectedKeys().hasOnly(['nome', 'whatsapp', 'email', 'updatedAt']))
+        );
+      allow delete: if isSignedIn() && isValidId(clienteId)
+        && (existing().empresaId == request.auth.uid || clienteId == request.auth.uid);
+    }
+
+    match /boletos/{boletoId} {
+      allow get: if isSignedIn() && isValidId(boletoId)
+        && (existing().empresaId == request.auth.uid || existing().clienteId == request.auth.uid);
+      allow list: if isSignedIn()
+        && (resource.data.empresaId == request.auth.uid || resource.data.clienteId == request.auth.uid);
+      allow create: if isSignedIn()
+        && isValidId(boletoId)
+        && isValidBoleto(incoming())
+        && incoming().empresaId == request.auth.uid
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && (incoming().status != 'Pago' || incoming().pagoEm == request.time)
+        && isEmpresaOwner()
+        && exists(/databases/$(database)/documents/clientes/$(incoming().clienteId))
+        && get(/databases/$(database)/documents/clientes/$(incoming().clienteId)).data.empresaId == request.auth.uid;
+      allow update: if isSignedIn()
+        && isValidId(boletoId)
+        && isValidBoleto(incoming())
+        && existing().empresaId == request.auth.uid
+        && existing().status != 'Pago'
+        && incoming().empresaId == existing().empresaId
+        && incoming().clienteId == existing().clienteId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          (incoming().status == 'Pago' && incoming().pagoEm == request.time && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'pagoEm', 'updatedAt'])) ||
+          (incoming().status != 'Pago' && incoming().diff(existing()).affectedKeys().hasOnly(['descricao', 'valor', 'vencimento', 'status', 'pixChave', 'codigoPix', 'updatedAt']))
+        );
+      allow delete: if isSignedIn() && isValidId(boletoId)
+        && (existing().empresaId == request.auth.uid || existing().clienteId == request.auth.uid);
+    }
+
+    match /documentos/{documentoId} {
+      allow get: if isSignedIn() && isValidId(documentoId)
+        && (existing().empresaId == request.auth.uid || existing().clienteId == request.auth.uid);
+      allow list: if isSignedIn()
+        && (resource.data.empresaId == request.auth.uid || resource.data.clienteId == request.auth.uid);
+      allow create: if isSignedIn()
+        && isValidId(documentoId)
+        && isValidDocumento(incoming())
+        && incoming().empresaId == request.auth.uid
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && isEmpresaOwner()
+        && exists(/databases/$(database)/documents/clientes/$(incoming().clienteId))
+        && get(/databases/$(database)/documents/clientes/$(incoming().clienteId)).data.empresaId == request.auth.uid;
+      allow update: if isSignedIn()
+        && isValidId(documentoId)
+        && isValidDocumento(incoming())
+        && existing().empresaId == request.auth.uid
+        && incoming().empresaId == existing().empresaId
+        && incoming().clienteId == existing().clienteId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly(['titulo', 'descricao', 'updatedAt']);
+      allow delete: if isSignedIn() && isValidId(documentoId)
+        && (existing().empresaId == request.auth.uid || existing().clienteId == request.auth.uid);
+
+      match /chunks/{chunkId} {
+        allow get: if isSignedIn() && isValidId(documentoId) && isValidId(chunkId)
+          && (existing().empresaId == request.auth.uid || existing().clienteId == request.auth.uid);
+        allow list: if isSignedIn()
+          && (resource.data.empresaId == request.auth.uid || resource.data.clienteId == request.auth.uid);
+        allow create: if isSignedIn()
+          && isValidId(documentoId)
+          && isValidId(chunkId)
+          && isValidDocumentoChunk(incoming())
+          && incoming().empresaId == request.auth.uid
+          && incoming().createdAt == request.time
+          && isEmpresaOwner()
+          && existsAfter(/databases/$(database)/documents/documentos/$(documentoId))
+          && getAfter(/databases/$(database)/documents/documentos/$(documentoId)).data.empresaId == request.auth.uid
+          && getAfter(/databases/$(database)/documents/documentos/$(documentoId)).data.clienteId == incoming().clienteId;
+        allow update: if false;
+        allow delete: if isSignedIn() && isValidId(documentoId) && isValidId(chunkId)
+          && (existing().empresaId == request.auth.uid || existing().clienteId == request.auth.uid);
+      }
+    }
+
+    match /chamados/{chamadoId} {
+      allow get: if isSignedIn() && isValidId(chamadoId)
+        && (existing().empresaId == request.auth.uid || existing().clienteId == request.auth.uid);
+      allow list: if isSignedIn()
+        && (resource.data.empresaId == request.auth.uid || resource.data.clienteId == request.auth.uid);
+      allow create: if isSignedIn()
+        && isValidId(chamadoId)
+        && isValidChamado(incoming())
+        && incoming().status == 'Aberto'
+        && incoming().resposta == ''
+        && incoming().respondidoEm == null
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && (
+          (incoming().empresaId == request.auth.uid && isEmpresaOwner() && exists(/databases/$(database)/documents/clientes/$(incoming().clienteId)) && get(/databases/$(database)/documents/clientes/$(incoming().clienteId)).data.empresaId == request.auth.uid) ||
+          (incoming().clienteId == request.auth.uid && exists(/databases/$(database)/documents/clientes/$(request.auth.uid)) && get(/databases/$(database)/documents/clientes/$(request.auth.uid)).data.empresaId == incoming().empresaId)
+        );
+      allow update: if isSignedIn()
+        && isValidId(chamadoId)
+        && isValidChamado(incoming())
+        && existing().empresaId == request.auth.uid
+        && existing().status != 'Resolvido'
+        && incoming().empresaId == existing().empresaId
+        && incoming().clienteId == existing().clienteId
+        && incoming().titulo == existing().titulo
+        && incoming().mensagem == existing().mensagem
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (incoming().resposta.size() == 0 ? incoming().respondidoEm == null : (incoming().respondidoEm == request.time || (incoming().resposta == existing().resposta && incoming().respondidoEm == existing().respondidoEm)))
+        && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'resposta', 'respondidoEm', 'updatedAt']);
+      allow delete: if isSignedIn() && isValidId(chamadoId)
+        && (existing().empresaId == request.auth.uid || existing().clienteId == request.auth.uid);
+    }
+
+    match /atividades/{atividadeId} {
+      allow get: if isSignedIn() && isValidId(atividadeId)
+        && (existing().empresaId == request.auth.uid || existing().clienteId == request.auth.uid);
+      allow list: if isSignedIn()
+        && (resource.data.empresaId == request.auth.uid || resource.data.clienteId == request.auth.uid);
+      allow create: if isSignedIn()
+        && isValidId(atividadeId)
+        && isValidAtividade(incoming())
+        && incoming().createdAt == request.time
+        && (incoming().empresaId == request.auth.uid || incoming().clienteId == request.auth.uid);
+      allow update: if false;
+      allow delete: if isSignedIn() && isValidId(atividadeId)
+        && (existing().empresaId == request.auth.uid || existing().clienteId == request.auth.uid);
+    }
+  }
+}
